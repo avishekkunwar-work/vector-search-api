@@ -8,6 +8,7 @@ Download and install Ollama from https://ollama.com/. Once installed, use it to 
 
 3. Extract OpenAI API Key (using GPT-4o)
 Obtain your OpenAI API key to authenticate requests to GPT-4o. This key is required for calling OpenAI’s services in your project.
+( Why? Because my GPU is limited and deepseek-r1 is slow locally, I extract my OpenAI API key and use GPT-4o embeddings through the cloud for faster performance. )
 
 4. Restore .NET Packages and Debug
 Restore all .NET dependencies for the project and run a build/debug to ensure everything is set up correctly.
