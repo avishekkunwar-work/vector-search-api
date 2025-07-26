@@ -1,1 +1,1 @@
-# VectorSearch
+# 1. Install pgvector extension for PostgreSQL
