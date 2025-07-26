@@ -1,0 +1,6 @@
+@VectorSearch_HostAddress = http://localhost:5042
+
+GET {{VectorSearch_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
