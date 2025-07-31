@@ -122,7 +122,7 @@ public class EmbeddingService : IEmbeddingService
             //Euclidean distance <-> //Cosine similarity <=>
             var sql = @"
                 SELECT originaltext
-                FROM test.vectorindex where embedding <=> CAST(@vectorParam AS vector) < 0.5
+                FROM test.vectorindex where embedding <=> CAST(@vectorParam AS vector) < 0.6
                 ORDER BY embedding <=> CAST(@vectorParam AS vector) 
                 LIMIT @topN";
 

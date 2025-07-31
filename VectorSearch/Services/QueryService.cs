@@ -7,6 +7,8 @@ using VectorSearch.Model;
 using OllamaSharp;
 using OllamaSharp.Models;
 using Microsoft.Extensions.AI;
+using System.Net.Http.Json;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace VectorSearch.Services;
 
@@ -43,9 +45,10 @@ public class QueryService : IQueryService
                 string context = string.Join("\n", topMatches.Data);
 
                 // Step 4: Call LLM Modules for result -- I was using open api models like gtp-4o
-                var prompt = $"Context:\n{context}\n\nQuestion:\n{question}";
+                var prompt = $"Context:\n{context}\n\nQuestion:\n{question} - just provide exact result, without any explanations on json only";
 
-                return await InvokeOpenApi(prompt);
+                //return await InvokeOpenApi(prompt);
+                result.Data= await GenerateAsync(prompt);
             }
             else
             {
@@ -66,6 +69,54 @@ public class QueryService : IQueryService
 
         return result;
     }
+
+
+
+    public async IAsyncEnumerable<string> StreamChatWithOllama(string message)
+    {
+        var requestBody = new
+        {
+            model = "gemma2:2b",
+            prompt = message,
+            stream = true,
+        };
+
+        using var response = await _httpClient.PostAsJsonAsync("http://localhost:11434/api/generate", requestBody);
+        response.EnsureSuccessStatusCode();
+
+        using var stream = await response.Content.ReadAsStreamAsync();
+        using var reader = new StreamReader(stream);
+
+        while (!reader.EndOfStream)
+        {
+            var line = await reader.ReadLineAsync();
+            if (string.IsNullOrWhiteSpace(line)) continue;
+
+            string chunk = null;
+
+            try
+            {
+                var json = JsonDocument.Parse(line.Trim());
+
+                if (json.RootElement.TryGetProperty("response", out var responsePart))
+                {
+                    var responseText = responsePart.GetString() ?? string.Empty;
+
+                    chunk = responseText;
+                }
+            }
+            catch
+            {
+                // Optionally log or ignore
+            }
+
+            if (!string.IsNullOrEmpty(chunk))
+            {
+                yield return chunk; // ✅ Now this is outside the try-catch block
+            }
+        }
+    }
+
 
     #region Private
     private async Task<Response<string>> InvokeOpenApi(string question)
@@ -116,5 +167,29 @@ public class QueryService : IQueryService
         return result;
     }
 
+    private async Task<string> GenerateAsync(string prompt, string model = "deepseek-r1:1.5b")
+    {
+        var requestBody = new
+        {
+            model = model,
+            prompt = prompt,
+            stream = false  
+        };
+
+        var content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+
+        var response = await _httpClient.PostAsync("http://localhost:11434/api/generate", content);
+        response.EnsureSuccessStatusCode();
+
+        var jsonResponse = await response.Content.ReadAsStringAsync();
+
+        using var document = JsonDocument.Parse(jsonResponse);
+        var responseText = document.RootElement.GetProperty("response").GetString();
+
+        var cleanResponse = Regex.Replace(responseText, "<think>.*?</think>", "", RegexOptions.Singleline).Trim();
+
+
+        return cleanResponse;
+    }
     #endregion
 }

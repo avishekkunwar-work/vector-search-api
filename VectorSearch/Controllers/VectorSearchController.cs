@@ -1,5 +1,9 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using OllamaSharp.Models.Chat;
+using Serilog;
+using System.Text;
 using VectorSearch.Services;
+using static VectorSearch.Model.ChatRequest;
 
 namespace VectorSearch.Controllers;
 
@@ -64,6 +68,53 @@ public class VectorSearchController: ControllerBase
         var reasoningResponse = await _queryService.AnswerUserQueryAsync(question);
 
         return Ok(reasoningResponse);
+    }
+
+
+    [HttpPost("stream")]
+    public async Task StreamChat([FromBody] ChatRequestLLM request)
+    {
+        Response.ContentType = "text/event-stream";
+
+        Response.Headers.Append("Cache-Control", "no-cache");
+
+        Response.Headers.Append("X-Accel-Buffering", "no");
+
+        await Response.StartAsync(); // Start streaming immediately
+
+        var queryEmbedding = await _embeddingService.GetEmbeddingAsync(request.Message);
+
+        var topMatches = await _embeddingService.SearchSimilarAsync(queryEmbedding);
+
+        if (topMatches.Success)
+        {
+            string context = string.Join("\n", topMatches.Data);
+
+            var systemPrompt = $"You are a backend model that returns only direct answers based on tabular input.\nDo not explain your reasoning.\nDo not return SQL or markdown.\nRespond only with a well-formed paragraph in plain English, using proper spacing and punctuation.";
+
+            var prompt = $"{systemPrompt}\n\nContext:\n{context}\n\nQuestion :\n{request.Message}";
+
+            StringBuilder sb = new();
+
+            await foreach (var chunk in _queryService.StreamChatWithOllama(prompt))
+            {
+                sb.Append(chunk); // accumulate chunks to reconstruct the full response progressively
+
+                string fullResponse = sb.ToString();
+
+                var buffer = Encoding.UTF8.GetBytes($"data: {fullResponse}\n\n");
+                await Response.Body.WriteAsync(buffer, 0, buffer.Length);
+                await Response.Body.FlushAsync();
+            }
+        }
+        else
+        {
+            var fallback = "Sorry, I couldn’t find anything similar in memory. Proceeding without context.\n";
+            var buffer = Encoding.UTF8.GetBytes($"data: {fallback}\n\n");
+            await Response.Body.WriteAsync(buffer, 0, buffer.Length);
+            await Response.Body.FlushAsync();
+        }
+       
     }
 
 }

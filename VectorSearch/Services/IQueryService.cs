@@ -11,6 +11,7 @@ namespace VectorSearch.Services;
 public interface IQueryService
 {
     Task<Response<string>> AnswerUserQueryAsync(string question);
+    IAsyncEnumerable<string> StreamChatWithOllama(string message);
 }
 
 
